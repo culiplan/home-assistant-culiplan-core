@@ -12,14 +12,20 @@ intentionally absent — those live in the standalone HACS distribution.
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any, Final, cast
 
-from aiohttp import ClientError, ClientSession
+from aiohttp import ClientError, ClientSession, ClientTimeout
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .const import BASE_URL
 
 _LOGGER = logging.getLogger(__name__)
+
+# Explicit per-request timeout for every REST call. aiohttp's default
+# (5 minutes total) is far too lenient for a coordinator that polls every
+# 5 minutes — a stuck request would stall the entire update cycle. Home
+# Assistant Core reviewers require explicit timeouts on every HTTP call.
+_API_TIMEOUT: Final = ClientTimeout(total=30)
 
 
 class CuliplanApiError(Exception):
@@ -151,43 +157,61 @@ class CuliplanApiClient:
     async def _get(self, path: str) -> Any:
         try:
             async with self._session.get(
-                f"{BASE_URL}{path}", headers=self._headers()
+                f"{BASE_URL}{path}",
+                headers=self._headers(),
+                timeout=_API_TIMEOUT,
             ) as resp:
                 self._raise_for_status(resp.status, path)
                 resp.raise_for_status()
                 return await resp.json()
+        except TimeoutError as err:
+            raise CuliplanApiError(f"GET {path} timed out") from err
         except ClientError as err:
             raise CuliplanApiError(f"GET {path} failed: {err}") from err
 
     async def _post(self, path: str, payload: dict[str, Any]) -> Any:
         try:
             async with self._session.post(
-                f"{BASE_URL}{path}", headers=self._headers(), json=payload
+                f"{BASE_URL}{path}",
+                headers=self._headers(),
+                json=payload,
+                timeout=_API_TIMEOUT,
             ) as resp:
                 self._raise_for_status(resp.status, path)
                 resp.raise_for_status()
                 return await resp.json()
+        except TimeoutError as err:
+            raise CuliplanApiError(f"POST {path} timed out") from err
         except ClientError as err:
             raise CuliplanApiError(f"POST {path} failed: {err}") from err
 
     async def _patch(self, path: str, payload: dict[str, Any]) -> Any:
         try:
             async with self._session.patch(
-                f"{BASE_URL}{path}", headers=self._headers(), json=payload
+                f"{BASE_URL}{path}",
+                headers=self._headers(),
+                json=payload,
+                timeout=_API_TIMEOUT,
             ) as resp:
                 self._raise_for_status(resp.status, path)
                 resp.raise_for_status()
                 return await resp.json()
+        except TimeoutError as err:
+            raise CuliplanApiError(f"PATCH {path} timed out") from err
         except ClientError as err:
             raise CuliplanApiError(f"PATCH {path} failed: {err}") from err
 
     async def _delete(self, path: str) -> None:
         try:
             async with self._session.delete(
-                f"{BASE_URL}{path}", headers=self._headers()
+                f"{BASE_URL}{path}",
+                headers=self._headers(),
+                timeout=_API_TIMEOUT,
             ) as resp:
                 self._raise_for_status(resp.status, path)
                 resp.raise_for_status()
+        except TimeoutError as err:
+            raise CuliplanApiError(f"DELETE {path} timed out") from err
         except ClientError as err:
             raise CuliplanApiError(f"DELETE {path} failed: {err}") from err
 

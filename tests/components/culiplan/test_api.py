@@ -266,3 +266,59 @@ def test_set_access_token() -> None:
     client = CuliplanApiClient(session=None, access_token="old")  # type: ignore[arg-type]
     client.set_access_token("new")
     assert client._access_token == "new"
+
+
+async def test_api_timeout_raises_api_error_get(
+    hass: HomeAssistant, mock_aioresponses: aioresponses
+) -> None:
+    """A timeout on GET surfaces as ``CuliplanApiError`` (mapped to UpdateFailed)."""
+    mock_aioresponses.get(
+        f"{BASE_URL}/api/shopping-list",
+        exception=TimeoutError("slow"),
+    )
+    session = aiohttp_client.async_get_clientsession(hass)
+    client = CuliplanApiClient(session, "token")
+    with pytest.raises(CuliplanApiError, match="timed out"):
+        await client.async_get_shopping_lists()
+
+
+async def test_api_timeout_raises_api_error_post(
+    hass: HomeAssistant, mock_aioresponses: aioresponses
+) -> None:
+    """A timeout on POST surfaces as ``CuliplanApiError``."""
+    mock_aioresponses.post(
+        f"{BASE_URL}/api/shopping-list",
+        exception=TimeoutError("slow"),
+    )
+    session = aiohttp_client.async_get_clientsession(hass)
+    client = CuliplanApiClient(session, "token")
+    with pytest.raises(CuliplanApiError, match="timed out"):
+        await client.async_add_shopping_item("Eggs")
+
+
+async def test_api_timeout_raises_api_error_patch(
+    hass: HomeAssistant, mock_aioresponses: aioresponses
+) -> None:
+    """A timeout on PATCH surfaces as ``CuliplanApiError``."""
+    mock_aioresponses.patch(
+        f"{BASE_URL}/api/shopping-list/x",
+        exception=TimeoutError("slow"),
+    )
+    session = aiohttp_client.async_get_clientsession(hass)
+    client = CuliplanApiClient(session, "token")
+    with pytest.raises(CuliplanApiError, match="timed out"):
+        await client.async_update_shopping_item("x", completed=True)
+
+
+async def test_api_timeout_raises_api_error_delete(
+    hass: HomeAssistant, mock_aioresponses: aioresponses
+) -> None:
+    """A timeout on DELETE surfaces as ``CuliplanApiError``."""
+    mock_aioresponses.delete(
+        f"{BASE_URL}/api/shopping-list/x",
+        exception=TimeoutError("slow"),
+    )
+    session = aiohttp_client.async_get_clientsession(hass)
+    client = CuliplanApiClient(session, "token")
+    with pytest.raises(CuliplanApiError, match="timed out"):
+        await client.async_remove_shopping_item("x")
