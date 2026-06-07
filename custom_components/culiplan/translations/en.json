@@ -1,0 +1,71 @@
+{
+  "config": {
+    "step": {
+      "pick_implementation": {
+        "title": "Connect Culiplan"
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Culiplan",
+        "description": "Your Culiplan session has expired. Click Submit to re-authenticate."
+      }
+    },
+    "abort": {
+      "already_configured": "Account is already configured",
+      "oauth_error": "OAuth authorization error",
+      "oauth_timeout": "Timeout resolving OAuth token",
+      "oauth_unauthorized": "OAuth authorization error while obtaining access token.",
+      "oauth_failed": "Error while obtaining access token.",
+      "missing_configuration": "The component is not configured. Please follow the documentation.",
+      "missing_credentials": "The integration requires application credentials.",
+      "wrong_account": "The authenticated Culiplan account does not match the existing entry. Re-authenticate with the same account or remove the entry and add the new account.",
+      "reauth_successful": "Re-authentication was successful",
+      "reconfigure_successful": "Re-configuration was successful"
+    },
+    "create_entry": {
+      "default": "Successfully authenticated"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Culiplan options",
+        "data": {
+          "expiry_days": "Pantry expiry window (days)",
+          "expiry_hours": "Pantry expiry binary-sensor window (hours)"
+        },
+        "data_description": {
+          "expiry_days": "Items expiring within this many days are counted by the expiring_pantry_items sensor.",
+          "expiry_hours": "Items expiring within this many hours cause the pantry_has_expiring binary sensor to turn on."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "meals_planned_this_week": {
+        "name": "Meals planned this week"
+      },
+      "shopping_items": {
+        "name": "Shopping items"
+      },
+      "expiring_pantry_items": {
+        "name": "Expiring pantry items"
+      }
+    },
+    "binary_sensor": {
+      "pantry_has_expiring": {
+        "name": "Pantry has expiring items"
+      }
+    },
+    "calendar": {
+      "meal_plan": {
+        "name": "Meal plan"
+      }
+    },
+    "todo": {
+      "shopping_list": {
+        "name": "Shopping list"
+      }
+    }
+  }
+}
