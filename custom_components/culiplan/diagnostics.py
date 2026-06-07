@@ -44,7 +44,7 @@ async def async_get_config_entry_diagnostics(
                 if coordinator.last_exception is not None
                 else None
             ),
-            "connected": coordinator._connected,
+            "push_connected": coordinator.push_connected,
         },
         "captured_at": datetime.now(UTC).isoformat(),
     }

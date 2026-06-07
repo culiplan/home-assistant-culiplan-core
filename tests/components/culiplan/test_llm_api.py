@@ -38,22 +38,24 @@ def _tool_input(tool: str, args: dict[str, object]) -> llm.ToolInput:
 
 
 async def test_register_and_unregister(hass: HomeAssistant) -> None:
-    """Registering and unregistering the API works idempotently."""
+    """Registering and unregistering the API is refcounted across entries."""
     async_register_llm_api(hass)
     apis = hass.data.get("llm", {})
     assert LLM_API_ID in apis
-    # Second call is a no-op.
+    # Second register from a second entry holds the API alive past one unload.
     async_register_llm_api(hass)
     assert LLM_API_ID in apis
     async_unregister_llm_api(hass)
+    assert LLM_API_ID in apis, "API must survive while another entry holds it"
+    # Last unregister drops it.
+    async_unregister_llm_api(hass)
     assert LLM_API_ID not in apis
-    # Idempotent unregister.
+    # Extra unregister is a no-op.
     async_unregister_llm_api(hass)
 
 
-async def test_unregister_when_llm_dict_missing(hass: HomeAssistant) -> None:
-    """Unregister is a no-op when the llm dict is absent."""
-    hass.data.pop("llm", None)
+async def test_unregister_when_never_registered(hass: HomeAssistant) -> None:
+    """Unregister is a no-op when the API was never registered."""
     async_unregister_llm_api(hass)
 
 

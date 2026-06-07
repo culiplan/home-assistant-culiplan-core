@@ -222,6 +222,77 @@ async def test_reauth_flow(hass: HomeAssistant, credential: None) -> None:
     assert result["step_id"] == "reauth_confirm"
 
 
+async def test_reauth_completes_and_updates_token(
+    hass: HomeAssistant,
+    hass_client_no_auth: Any,
+    aioclient_mock: AiohttpClientMocker,
+    current_request_with_host: None,
+    credential: None,
+) -> None:
+    """Re-auth full round-trip updates the existing entry's token."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="user-42",
+        data={
+            "auth_implementation": DOMAIN,
+            "token": {"access_token": "stale", "refresh_token": "r"},
+        },
+    )
+    entry.add_to_hass(hass)
+    aioclient_mock.get(f"{BASE_URL}/api/users/me", json={"id": "user-42"})
+
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+
+    # Click "Submit" to advance from reauth_confirm into the OAuth round-trip.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={}
+    )
+    assert result["type"] is FlowResultType.EXTERNAL_STEP
+
+    with patch("custom_components.culiplan.async_setup_entry", return_value=True):
+        result = await _complete_oauth(
+            hass,
+            hass_client_no_auth,
+            aioclient_mock,
+            flow_id=result["flow_id"],
+            access_token="refreshed-token",
+        )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data["token"]["access_token"] == "refreshed-token"
+
+
+async def test_reauth_wrong_account_aborts(
+    hass: HomeAssistant,
+    hass_client_no_auth: Any,
+    aioclient_mock: AiohttpClientMocker,
+    current_request_with_host: None,
+    credential: None,
+) -> None:
+    """Re-auth with a different Culiplan account is rejected."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="user-42",
+        data={
+            "auth_implementation": DOMAIN,
+            "token": {"access_token": "stale"},
+        },
+    )
+    entry.add_to_hass(hass)
+    aioclient_mock.get(f"{BASE_URL}/api/users/me", json={"id": "someone-else"})
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={}
+    )
+    result = await _complete_oauth(
+        hass, hass_client_no_auth, aioclient_mock, flow_id=result["flow_id"]
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "wrong_account"
+
+
 async def test_options_flow_form_and_save(
     hass: HomeAssistant, credential: None
 ) -> None:

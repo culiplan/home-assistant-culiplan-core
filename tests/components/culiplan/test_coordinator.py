@@ -203,6 +203,7 @@ async def test_connect_handles_connection_error(
         instance.connect = AsyncMock(
             side_effect=socketio.exceptions.ConnectionError("nope")
         )
+        instance.disconnect = AsyncMock()
         with patch.object(coordinator, "_schedule_reconnect") as sched:
             await coordinator._connect()
         sched.assert_called_once()

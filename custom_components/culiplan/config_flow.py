@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 from typing import Any, cast
 
@@ -39,6 +40,7 @@ class OAuth2FlowHandler(
     """Handle the Culiplan OAuth2 + reauth + reconfigure flow."""
 
     DOMAIN = DOMAIN
+    VERSION = 1
 
     @property
     def logger(self) -> logging.Logger:
@@ -64,8 +66,20 @@ class OAuth2FlowHandler(
         return CuliplanOptionsFlow()
 
     async def async_oauth_create_entry(self, data: dict[str, Any]) -> ConfigFlowResult:
-        """Create the entry on successful OAuth, enforcing one entry per account."""
+        """Create or update the entry on successful OAuth.
+
+        Three sources land here:
+
+        * ``SOURCE_USER`` — first-time setup, create a new entry.
+        * ``SOURCE_REAUTH`` — token refresh failed, update the existing
+          entry's token (same account required).
+        * ``SOURCE_RECONFIGURE`` — user clicked "Reconfigure", update the
+          existing entry's token (same account required).
+        """
         account_id = await self._fetch_account_id(data)
+
+        if self.source == config_entries.SOURCE_REAUTH:
+            return await self._async_finish_reauth(data, account_id)
 
         if self.source == config_entries.SOURCE_RECONFIGURE:
             return await self._async_finish_reconfigure(data, account_id)
@@ -76,7 +90,9 @@ class OAuth2FlowHandler(
 
         return self.async_create_entry(title="Culiplan", data=data)
 
-    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
         """Start the re-auth flow when the API returns 401."""
         return await self.async_step_reauth_confirm()
 
@@ -123,6 +139,27 @@ class OAuth2FlowHandler(
     ) -> ConfigFlowResult:
         """Apply a reconfigure result, enforcing the same Culiplan account."""
         entry = self._get_reconfigure_entry()
+        if (
+            entry.unique_id is not None
+            and account_id is not None
+            and entry.unique_id != account_id
+        ):
+            return self.async_abort(reason="wrong_account")
+        if account_id is not None:
+            await self.async_set_unique_id(account_id)
+            self._abort_if_unique_id_mismatch(reason="wrong_account")
+        return self.async_update_reload_and_abort(entry, data={**entry.data, **data})
+
+    async def _async_finish_reauth(
+        self, data: dict[str, Any], account_id: str | None
+    ) -> ConfigFlowResult:
+        """Apply a re-auth result, enforcing the same Culiplan account.
+
+        Without this branch, ``async_oauth_create_entry`` falls through
+        to ``_abort_if_unique_id_configured`` and aborts the flow with
+        ``already_configured`` — leaving the user with a stale token.
+        """
+        entry = self._get_reauth_entry()
         if (
             entry.unique_id is not None
             and account_id is not None

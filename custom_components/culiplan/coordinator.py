@@ -61,6 +61,11 @@ class CuliplanCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._connected = False
         self._stopped = False
 
+    @property
+    def push_connected(self) -> bool:
+        """Return ``True`` while the Socket.IO push channel is connected."""
+        return self._connected
+
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
     async def async_start(self) -> None:
@@ -77,7 +82,7 @@ class CuliplanCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 await self._reconnect_task
             self._reconnect_task = None
         if self._sio is not None:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(socketio.exceptions.SocketIOError, OSError):
                 await self._sio.disconnect()
             self._sio = None
 
@@ -218,7 +223,7 @@ class CuliplanCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     await self._connect()
                     if self._connected:
                         return
-                except Exception as err:
+                except (socketio.exceptions.SocketIOError, OSError) as err:
                     _LOGGER.debug("Reconnect attempt failed: %s", err)
                 wait = min(wait * _RECONNECT_FACTOR, _RECONNECT_MAX_DELAY)
 

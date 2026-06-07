@@ -18,7 +18,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Diagnostics with token redaction.
 - `quality_scale.yaml` honestly targeting Silver on day one.
 - CI: hassfest validation, ruff (check + format), mypy strict, pytest
-  with ≥95% coverage on Python 3.12 + 3.13.
+  with ≥95% coverage on Python 3.13 (matches HA Core 2026.x).
 
 ### Not included (relative to HACS distribution)
 - Self-updater (Core's monorepo is the update mechanism).

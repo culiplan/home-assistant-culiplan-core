@@ -9,12 +9,13 @@ milk to my shopping list" and the agent calls Culiplan natively.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 import logging
 from typing import Any, cast
 from urllib.parse import quote
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import llm
 from homeassistant.util.json import JsonObjectType
 import voluptuous as vol
@@ -25,6 +26,11 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 LLM_API_ID = f"{DOMAIN}-llm"
+
+# Refcount of config entries that hold the LLM API alive. The API is a
+# process-wide singleton — register on first entry, unregister on last.
+_LLM_REFCOUNT_KEY = f"{DOMAIN}_llm_refcount"
+_LLM_UNREGISTER_KEY = f"{DOMAIN}_llm_unregister"
 
 _PROMPT = (
     "You can answer questions about the user's meal plan, recipes, "
@@ -366,21 +372,34 @@ def _filter_expiring(
     return out
 
 
+@callback
 def async_register_llm_api(hass: HomeAssistant) -> None:
-    """Register the Culiplan LLM API.
+    """Register the Culiplan LLM API (refcounted across config entries).
 
-    Idempotent across reloads — if the API id is already registered we
-    leave it alone. HA's :func:`llm.async_register_api` itself raises on
-    duplicate registration, so we pre-check the singleton.
+    The LLM API is a process-wide singleton, but each config entry that
+    sets it up holds a reference. We register on the first entry and
+    only unregister when the last entry is unloaded. This avoids the
+    silent "API disappeared from one entry's unload" bug.
     """
-    apis = hass.data.get("llm")
-    if isinstance(apis, dict) and LLM_API_ID in apis:
-        return
-    llm.async_register_api(hass, CuliplanLLMAPI(hass))
+    count = cast(int, hass.data.get(_LLM_REFCOUNT_KEY, 0))
+    if count == 0:
+        unregister = llm.async_register_api(hass, CuliplanLLMAPI(hass))
+        hass.data[_LLM_UNREGISTER_KEY] = unregister
+    hass.data[_LLM_REFCOUNT_KEY] = count + 1
 
 
+@callback
 def async_unregister_llm_api(hass: HomeAssistant) -> None:
-    """Remove the Culiplan LLM API from the singleton registry."""
-    apis = hass.data.get("llm")
-    if isinstance(apis, dict):
-        apis.pop(LLM_API_ID, None)
+    """Drop one reference; unregister the API when the last is gone."""
+    count = cast(int, hass.data.get(_LLM_REFCOUNT_KEY, 0))
+    if count <= 0:
+        return
+    count -= 1
+    hass.data[_LLM_REFCOUNT_KEY] = count
+    if count > 0:
+        return
+    unregister = cast(
+        "Callable[[], None] | None", hass.data.pop(_LLM_UNREGISTER_KEY, None)
+    )
+    if unregister is not None:
+        unregister()
