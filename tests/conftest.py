@@ -58,7 +58,7 @@ def mock_config_entry() -> MockConfigEntry:
 
 
 @pytest.fixture
-def mock_api() -> Generator[AsyncMock, None, None]:
+def mock_api() -> Generator[AsyncMock]:
     """Return a patched ``CuliplanApiClient`` instance."""
     with patch("custom_components.culiplan.CuliplanApiClient", autospec=True) as cls:
         instance = cls.return_value
@@ -104,7 +104,7 @@ def mock_api() -> Generator[AsyncMock, None, None]:
 
 
 @pytest.fixture
-def mock_socketio() -> Generator[AsyncMock, None, None]:
+def mock_socketio() -> Generator[AsyncMock]:
     """Stub out ``socketio.AsyncClient`` so coordinator.start() is a no-op."""
     with patch("custom_components.culiplan.coordinator.socketio.AsyncClient") as cls:
         instance = cls.return_value
@@ -122,7 +122,7 @@ async def setup_integration(
     mock_config_entry: MockConfigEntry,
     mock_api: AsyncMock,
     mock_socketio: AsyncMock,
-) -> AsyncGenerator[MockConfigEntry, None]:
+) -> AsyncGenerator[MockConfigEntry]:
     """Set up the integration with mocked external surfaces."""
     mock_config_entry.add_to_hass(hass)
     with patch(
