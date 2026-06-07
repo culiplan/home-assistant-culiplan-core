@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import logging
-from typing import Any, cast
+from typing import Any, Final, cast
 
 import aiohttp
 from homeassistant import config_entries
@@ -32,6 +32,11 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Account-id lookup runs during the config-flow user journey. 10s total is
+# short enough to keep the UI responsive on a flaky backend without
+# falsely failing on cold-start cloud-run latency.
+_ACCOUNT_ID_TIMEOUT: Final = aiohttp.ClientTimeout(total=10)
 
 
 class OAuth2FlowHandler(
@@ -123,7 +128,7 @@ class OAuth2FlowHandler(
             async with session.get(
                 f"{BASE_URL}/api/users/me",
                 headers={"Authorization": f"Bearer {access_token}"},
-                timeout=aiohttp.ClientTimeout(total=10),
+                timeout=_ACCOUNT_ID_TIMEOUT,
             ) as resp:
                 if resp.status != 200:
                     return None

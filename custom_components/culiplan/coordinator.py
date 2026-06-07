@@ -44,6 +44,9 @@ _RECONNECT_FACTOR = 2.0
 # reconnecting in lockstep after a shared backend outage. `random` (not
 # `secrets`) is fine here - this is anti-thundering-herd, not a crypto seed.
 _RECONNECT_JITTER_FRACTION = 0.25
+# Socket.IO initial-handshake timeout. Longer than the REST timeout because
+# the WS upgrade has to traverse the same path plus an Engine.IO handshake.
+_SOCKETIO_HANDSHAKE_TIMEOUT = 15
 
 
 class CuliplanCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -169,7 +172,7 @@ class CuliplanCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 namespaces=[HA_NAMESPACE],
                 auth={"token": access_token},
                 transports=["websocket"],
-                wait_timeout=15,
+                wait_timeout=_SOCKETIO_HANDSHAKE_TIMEOUT,
             )
         except socketio.exceptions.ConnectionError as err:
             _LOGGER.debug("Failed to connect to /ha-events: %s", err)
