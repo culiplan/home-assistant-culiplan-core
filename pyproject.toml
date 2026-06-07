@@ -32,13 +32,7 @@ exclude_lines = [
 python_version = "3.13"
 strict = true
 ignore_missing_imports = true
-# `[misc]` covers the HA-stub gap where base classes (TodoListEntity,
-# AuthImplementation, DataUpdateCoordinator, llm.API, llm.Tool, ...) are
-# typed `Any` in the installed `homeassistant` stubs — subclassing them
-# triggers "Class cannot subclass X (has type Any) [misc]" on every
-# entity / view class. That's a stub gap, not a real typing issue.
 warn_return_any = false
-disable_error_code = ["misc"]
 
 [[tool.mypy.overrides]]
 module = ["socketio.*", "engineio.*"]
