@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 from datetime import timedelta
 import logging
+import random
 from typing import Any, cast
 
 from homeassistant.config_entries import ConfigEntry
@@ -30,10 +31,19 @@ HA_NAMESPACE = "/ha-events"
 HA_EVENT = "ha:event"
 HA_ERROR = "ha:error"
 
+# Culiplan plans rarely change minute-by-minute; the Socket.IO push channel
+# delivers near-real-time updates when connected. 5 minutes is the safety-net
+# poll interval used only when push is disconnected (Bronze: appropriate-polling).
 _DEFAULT_POLL_INTERVAL = timedelta(minutes=5)
 _RECONNECT_INITIAL_DELAY = 2.0
-_RECONNECT_MAX_DELAY = 120.0
+# Cap reconnect backoff at 60s so a recovered backend is rediscovered quickly
+# without hammering it during a full outage.
+_RECONNECT_MAX_DELAY = 60.0
 _RECONNECT_FACTOR = 2.0
+# Random jitter (0-25 % of the current delay) prevents N coordinators from
+# reconnecting in lockstep after a shared backend outage. `random` (not
+# `secrets`) is fine here - this is anti-thundering-herd, not a crypto seed.
+_RECONNECT_JITTER_FRACTION = 0.25
 
 
 class CuliplanCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -211,9 +221,13 @@ class CuliplanCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         async def _reconnect_loop(initial_delay: float) -> None:
-            wait = initial_delay
+            base = initial_delay
             while not self._connected and not self._stopped:
-                _LOGGER.debug("Reconnecting to Culiplan in %.0fs", wait)
+                # Apply jitter on each attempt so two coordinators sharing the
+                # same outage clock don't pick the same delay.
+                jitter = random.uniform(0, base * _RECONNECT_JITTER_FRACTION)
+                wait = base + jitter
+                _LOGGER.debug("Reconnecting to Culiplan in %.1fs", wait)
                 await asyncio.sleep(wait)
                 if self._stopped:
                     return
@@ -225,7 +239,7 @@ class CuliplanCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         return
                 except (socketio.exceptions.SocketIOError, OSError) as err:
                     _LOGGER.debug("Reconnect attempt failed: %s", err)
-                wait = min(wait * _RECONNECT_FACTOR, _RECONNECT_MAX_DELAY)
+                base = min(base * _RECONNECT_FACTOR, _RECONNECT_MAX_DELAY)
 
         self._reconnect_task = self.hass.async_create_background_task(
             _reconnect_loop(delay),

@@ -290,6 +290,95 @@ async def test_schedule_reconnect_skips_if_task_running(
     coordinator._reconnect_task.cancel()
 
 
+async def test_reconnect_loop_applies_jitter(
+    hass: HomeAssistant,
+    coordinator_pair: tuple[CuliplanCoordinator, MagicMock],
+) -> None:
+    """Two coordinators reconnecting with the same base delay get different sleeps.
+
+    The jitter band is 0-25 % of the current base; with `random.uniform` seeded
+    differently across calls, two consecutive sleep arguments must not be
+    bit-identical. Guards against accidentally reverting to a fixed-delay loop.
+    """
+    coordinator, _ = coordinator_pair
+    captured: list[float] = []
+
+    async def _capturing_sleep(wait: float) -> None:
+        captured.append(wait)
+        # Flip the coordinator to "connected" after the first sleep so the
+        # loop exits cleanly.
+        if len(captured) >= 2:
+            coordinator._connected = True
+
+    async def _noop_connect() -> None:
+        return
+
+    with (
+        patch("asyncio.sleep", new=_capturing_sleep),
+        patch.object(coordinator, "_connect", new=_noop_connect),
+    ):
+        coordinator._schedule_reconnect(delay=4.0)
+        import asyncio as _a
+
+        for _ in range(20):
+            await _a.sleep(0)
+            if (
+                coordinator._reconnect_task is not None
+                and coordinator._reconnect_task.done()
+            ):
+                break
+
+    await coordinator.async_stop()
+    # First wait must be base + jitter ∈ [4.0, 5.0).
+    assert 4.0 <= captured[0] < 5.0, f"first sleep out of band: {captured[0]}"
+    # Second wait uses doubled base: ∈ [8.0, 10.0).
+    assert 8.0 <= captured[1] < 10.0, f"second sleep out of band: {captured[1]}"
+    # Statistically, the jitter fraction (uniform 0..0.25*base) on a 4s base
+    # makes a 0.0-exact draw vanishingly unlikely. Guard against fixed delay.
+    assert captured[0] != 4.0 or captured[1] != 8.0
+
+
+async def test_reconnect_delay_caps_at_max(
+    hass: HomeAssistant,
+    coordinator_pair: tuple[CuliplanCoordinator, MagicMock],
+) -> None:
+    """Backoff caps at 60s + 25% jitter (never grows unbounded)."""
+    coordinator, _ = coordinator_pair
+    captured: list[float] = []
+    call_count = 0
+
+    async def _capturing_sleep(wait: float) -> None:
+        nonlocal call_count
+        captured.append(wait)
+        call_count += 1
+        if call_count >= 10:
+            coordinator._stopped = True
+
+    async def _noop_connect() -> None:
+        return
+
+    with (
+        patch("asyncio.sleep", new=_capturing_sleep),
+        patch.object(coordinator, "_connect", new=_noop_connect),
+    ):
+        # Start at a high delay so we cap fast.
+        coordinator._schedule_reconnect(delay=50.0)
+        import asyncio as _a
+
+        for _ in range(40):
+            await _a.sleep(0)
+            if (
+                coordinator._reconnect_task is not None
+                and coordinator._reconnect_task.done()
+            ):
+                break
+
+    await coordinator.async_stop()
+    # Once base hits the 60s cap, sleep is in [60, 75).
+    for wait in captured[3:]:
+        assert wait < 75.1, f"sleep {wait} exceeded cap + jitter"
+
+
 async def test_refresh_token_propagates(
     hass: HomeAssistant,
     coordinator_pair: tuple[CuliplanCoordinator, MagicMock],
