@@ -1,0 +1,88 @@
+[project]
+name = "home-assistant-culiplan-core"
+version = "0.1.0"
+description = "Home Assistant Core integration for Culiplan (slim, Core-ready)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+
+[tool.pytest.ini_options]
+# `pytest-homeassistant-custom-component` uses async fixtures heavily;
+# auto mode lets sync fixtures consume them without manual unwrap.
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["custom_components/culiplan"]
+omit = ["custom_components/culiplan/__pycache__/*"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "assert_never",
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+ignore_missing_imports = true
+# `[misc]` covers the HA-stub gap where base classes (TodoListEntity,
+# AuthImplementation, DataUpdateCoordinator, llm.API, llm.Tool, ...) are
+# typed `Any` in the installed `homeassistant` stubs — subclassing them
+# triggers "Class cannot subclass X (has type Any) [misc]" on every
+# entity / view class. That's a stub gap, not a real typing issue.
+warn_return_any = false
+disable_error_code = ["misc"]
+
+[[tool.mypy.overrides]]
+module = ["socketio.*", "engineio.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+extend-exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "B",   # flake8-bugbear
+    "I",   # isort
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "TID", # tidy imports
+    "RUF", # ruff-specific
+    "PL",  # pylint
+    "D",   # pydocstyle
+]
+ignore = [
+    "D203",  # one-blank-line-before-class (conflicts with D211)
+    "D212",  # multi-line-summary-first-line (conflicts with D213)
+    "D107",  # missing docstring on __init__ — class docstring covers it
+    "PLR0913", # too many arguments — config_flow & coordinator legitimately need them
+    "PLR2004", # magic value — readability, prefer the literal where it's local
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "PLR2004", "S101", "PLR0913", "SLF001", "PLC0415", "RUF059"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.isort]
+# Match Home Assistant's import convention — `homeassistant` is treated
+# as a third-party package, and the integration's own modules are the
+# only first-party section.
+known-first-party = ["custom_components.culiplan", "tests"]
+combine-as-imports = true
+force-sort-within-sections = true
+
